@@ -88,7 +88,7 @@ class BulkTextExtract:
 
     def begin_extract(self):
         print("Spawning pool and beginning... This will take quite some time.")
-        with WorkerPool(n_jobs=6, shared_objects=(self.progress_index, self.files, self.progress_file)) as self.thread_pool:
+        with WorkerPool(n_jobs=self.max_num_threads, shared_objects=(self.progress_index, self.files, self.progress_file)) as self.thread_pool:
             self.running_pool = True
             to_do = self.files[self.progress_index:]
             results = self.thread_pool.map_unordered(BulkTextExtract.textExtractor, make_single_arguments(to_do, generator=False), progress_bar=True, worker_exit=BulkTextExtract.finish_thread)
@@ -108,6 +108,7 @@ class BulkTextExtract:
             try:
                 part = partition(filename=file, **BulkTextExtract.unstructured_settings)
             except OSError as e:
+                part = ["Error", f"Failed to partition {file}"]
                 print(f"There was a problem partitioning {file}. Logging information.")
                 dbg(f"OSError logging {file}", e)
         try:
@@ -143,7 +144,7 @@ class BulkTextExtract:
         self.running_pool = False
         self.directory = validate_directory(directory)
         self.progress_file = self.directory+"/progress.json"
-        self.max_num_threads = 10
+        self.max_num_threads = 6
         self.thread_pool = None
 
         if directory == False:
