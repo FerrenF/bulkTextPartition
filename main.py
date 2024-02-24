@@ -158,11 +158,24 @@ class BulkTextExtract:
             segment_dir = os.path.join(directory, document_name)
             os.makedirs(segment_dir, exist_ok=True)  # Create if it doesn't exist
 
+            def serialize_data(data):
+                if isinstance(data, dict):
+                    return {k: serialize_data(v) for k, v in data.items()}
+                elif isinstance(data, list):
+                    return [serialize_data(item) for item in data]
+                else:
+                    try:
+                        json.dumps(data)
+                        return data
+                    except (TypeError, OverflowError):
+                        print(f"Skipping unserializable object: {data}")
+                        return None
+
             for segment_index, segment in enumerate(part):
                 segment_filename = f"{document_name}_{segment_index}.json"
                 segment_filepath = os.path.join(segment_dir, segment_filename)
                 with open(segment_filepath, "w") as f:
-                    json.dump(segment, f, indent=4)  # Indent for readability
+                    json.dump(serialize_data(segment), f, indent=4)  # Indent for readability
 
             print(f"Saved {len(part)} segments.")
         except (ValueError or IOError) as e:
