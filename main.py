@@ -10,6 +10,9 @@ import mpire
 from unstructured.partition.auto import partition
 from mpire import WorkerPool
 from mpire.utils import make_single_arguments
+from ebooklib import epub
+from ebooklib import mobi
+
 
 DEBUG = False
 def validate_directory(directory):
@@ -86,7 +89,51 @@ class BulkTextExtract:
         progress[0] += 1
         BulkTextExtract.save_progress(progress[2], progress[1], progress[0])
 
+    @staticmethod
+    def convert_mobi(mobi_file_path, output_format="epub"):
+        """Converts a MOBI file to HTML or EPUB format.
+
+        Args:
+            mobi_file_path (str): Path to the MOBI file.
+            output_format (str, optional): Desired output format ("html" or "epub"). Defaults to "epub".
+
+        Raises:
+            ValueError: If an unsupported output format is specified.
+        """
+
+        if output_format not in ["html", "epub"]:
+            raise ValueError(f"Unsupported output format: {output_format}")
+
+        mobi_book = mobi.BookReader(mobi_file_path)
+
+        if output_format == "html":
+            with open("output.html", "w") as f:
+                for item in mobi_book.get_items():
+                    if item.get_type() == mobi.ITEM_DOCUMENT:
+                        f.write(item.get_content().decode("utf-8"))
+        else:
+            epub_book = epub.EpubBook()
+            for item in mobi_book.get_items():
+                if item.get_type() == mobi.ITEM_DOCUMENT:
+                    item_data = item.get_content().decode("utf-8")
+                    epub_book.add_item(epub.EpubHtml(title="Book Content", file_name="content.html", content=item_data))
+            epub.write_epub("output.epub", epub_book)
+
+
     def begin_extract(self):
+
+        print("Looking for files that need conversion...")
+
+        for file in self.files:
+            if str(file).endswith('.mobi'):
+                print(f"Converting {file} to an epub format...")
+                try:
+                    BulkTextExtract.convert_mobi(file, "epub")
+                except Exception as e:
+                    print(f"Failed to convert {file}")
+                else:
+                    self.files[self.files.index(file)] = str(file).replace('.mobi', '.epub')
+
         print("Spawning pool and beginning... This will take quite some time.")
         with WorkerPool(n_jobs=self.max_num_threads, shared_objects=(self.progress_index, self.files, self.progress_file)) as self.thread_pool:
             self.running_pool = True
