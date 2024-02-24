@@ -7,7 +7,7 @@ import time
 
 from unstructured.partition.auto import partition
 
-DEBUG = True
+DEBUG = False
 def validate_directory(directory):
     if os.path.exists(directory):
         return directory
