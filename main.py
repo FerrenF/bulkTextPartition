@@ -91,7 +91,7 @@ class BulkTextExtract:
         with WorkerPool(n_jobs=self.max_num_threads, shared_objects=(self.progress_index, self.files, self.progress_file)) as self.thread_pool:
             self.running_pool = True
             to_do = self.files[self.progress_index:]
-            results = self.thread_pool.map_unordered(BulkTextExtract.textExtractor, make_single_arguments(to_do, generator=False), progress_bar=True, worker_exit=BulkTextExtract.finish_thread)
+            self.thread_pool.map_unordered(BulkTextExtract.textExtractor, to_do, progress_bar=True, worker_exit=BulkTextExtract.finish_thread)
 
         self.complete_progress()
 
