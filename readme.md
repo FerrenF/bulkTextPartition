@@ -31,12 +31,3 @@ This Python script extracts text from various document formats and splits them i
 ### License
 
 MIT License
-
-**Note:** This is a basic README and can be further improved by adding:
-
-* Screenshots or GIFs showcasing the script's functionality.
-* More detailed usage examples for specific scenarios.
-* Contribution guidelines if you encourage collaboration.
-* Links to relevant resources like `unstructured-io` documentation.
-
-Feel free to customize and expand this template to fit your specific needs and preferences.
