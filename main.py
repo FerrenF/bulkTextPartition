@@ -12,6 +12,7 @@ import mobi
 import mpire
 from unstructured.partition.auto import partition
 from mpire import WorkerPool
+from unstructured.staging.base import convert_to_dict
 
 DEBUG = False
 def validate_directory(directory):
@@ -143,7 +144,7 @@ class BulkTextExtract:
             part = ["test","test"]
         else:
             try:
-                part = partition(filename=file, **BulkTextExtract.unstructured_settings)
+                part = convert_to_dict(partition(filename=file, **BulkTextExtract.unstructured_settings))
             except OSError as e:
                 part = ["Error", f"Failed to partition {file}"]
                 print(f"There was a problem partitioning {file}. Logging information.")
@@ -168,14 +169,20 @@ class BulkTextExtract:
                         json.dumps(data)
                         return data
                     except (TypeError, OverflowError):
-                        print(f"Skipping unserializable object: {data}")
-                        return None
 
-            for segment_index, segment in enumerate(part):
-                segment_filename = f"{document_name}_{segment_index}.json"
-                segment_filepath = os.path.join(segment_dir, segment_filename)
-                with open(segment_filepath, "w") as f:
-                    json.dump(serialize_data(segment), f, indent=4)  # Indent for readability
+                        try:
+                            s = str(data)
+                        except (TypeError, OSError):
+                            print(f"Skipping unserializable object: {data}")
+                            return None
+                        return s
+
+
+            segment_filename = f"{document_name}_raw.json"
+            segment_filepath = os.path.join(segment_dir, segment_filename)
+            with open(segment_filepath, "w") as f:
+                json.dump(serialize_data(part), f, indent=4)  # Indent for readability
+
 
             print(f"Saved {len(part)} segments.")
         except (ValueError or IOError) as e:
