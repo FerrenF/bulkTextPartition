@@ -1,11 +1,15 @@
 import io
+import logging
 import multiprocessing
 import os
 import json
 import signal
 import time
 
+import mpire
 from unstructured.partition.auto import partition
+from mpire import WorkerPool
+from mpire.utils import make_single_arguments
 
 DEBUG = False
 def validate_directory(directory):
@@ -18,14 +22,28 @@ def validate_directory(directory):
             return test
     return False
 
+
+dbg_file = "debug.log"
+def dbg(msg, obj, alarm: int = 0):
+    conv = ""
+    try:
+        conv=str(obj)
+    except TypeError:
+        conv="<Could not convert>"
+    print(f"DEBUG: {msg} --- attached object {conv}")
+
+    if alarm == 1:
+        logging.warning(msg, obj)
+
 class BulkTextExtract:
 
+    extract_timeout = (60*60)*2 # 2 hours
     unstructured_settings = {
         "include_page_breaks" : True,
-        "strategy" : 'hi_res',
+        "strategy" : 'fast',
         "chunking_strategy" : "by_title"
     }
-    file_types_of_interest = ("pdf", "mobi", "epub", "djvu")
+    file_types_of_interest = ("pdf", "mobi", "epub")
 
     def find_files(self):
         """Scans a directory and its subdirectories for files of specified types."""
@@ -38,18 +56,18 @@ class BulkTextExtract:
         self.files = list(files.union(self.files))
         return files
 
-
-
-
     def complete_progress(self):
         if os.path.exists(self.progress_file):
             os.remove(self.progress_file)
             print("Removed old progress file.")
+        self.running_pool = False
 
-    def save_progress(self):
+
+    @staticmethod
+    def save_progress(file, files, progress_index):
         """Saves progress information to a JSON file."""
-        data = {"files": self.files, "progress_index": self.progress_index}
-        with open(self.progress_file, "w") as f:
+        data = {"files": files, "progress_index": progress_index}
+        with open(file, "w") as f:
             json.dump(data, f)
 
     def attempt_load_progress(self):
@@ -62,39 +80,55 @@ class BulkTextExtract:
             self.files = None
             self.progress_index = 0
 
+
+    @staticmethod
+    def finish_thread(progress):
+        progress[0] += 1
+        BulkTextExtract.save_progress(progress[2], progress[1], progress[0])
+
     def begin_extract(self):
         print("Spawning pool and beginning... This will take quite some time.")
-        self.thread_pool.starmap(BulkTextExtract.textExtractor, enumerate(self.files[self.progress_index:]))
-        self.thread_pool.close()  # Signal end of tasks (normal completion)
-        self.thread_pool.join()  # Wait for completion
+        with WorkerPool(n_jobs=6, shared_objects=(self.progress_index, self.files, self.progress_file)) as self.thread_pool:
+            self.running_pool = True
+            to_do = self.files[self.progress_index:]
+            results = self.thread_pool.map_unordered(BulkTextExtract.textExtractor, make_single_arguments(to_do, generator=False), progress_bar=True, worker_exit=BulkTextExtract.finish_thread)
+
         self.complete_progress()
+
 
     @staticmethod
     def textExtractor(index, file):
-        """Extracts text from a file. Replace this with your actual implementation."""
+
         global DEBUG
-        print(f"Extracting text from {file}")
+        print(f"\nExtracting text from {file}")
         if DEBUG == True:
             time.sleep(1)
             part = ["test","test"]
         else:
-            part = partition(filename=file, **BulkTextExtract.unstructured_settings)
+            try:
+                part = partition(filename=file, **BulkTextExtract.unstructured_settings)
+            except OSError as e:
+                print(f"There was a problem partitioning {file}. Logging information.")
+                dbg(f"OSError logging {file}", e)
+        try:
 
-        directory = os.path.dirname(file)
-        # Create a cleaned-up document name for directory and file naming
-        document_name = os.path.splitext(os.path.basename(file))[0].replace(".", "_")
+            directory = os.path.dirname(file)
+            # Create a cleaned-up document name for directory and file naming
+            document_name = os.path.splitext(os.path.basename(file))[0].replace(".", "_")
 
-        # Create the directory for storing segments
-        segment_dir = os.path.join(directory, document_name)
-        os.makedirs(segment_dir, exist_ok=True)  # Create if it doesn't exist
+            # Create the directory for storing segments
+            segment_dir = os.path.join(directory, document_name)
+            os.makedirs(segment_dir, exist_ok=True)  # Create if it doesn't exist
 
-        for segment_index, segment in enumerate(part):
-            segment_filename = f"{document_name}_{segment_index}.json"
-            segment_filepath = os.path.join(segment_dir, segment_filename)
-            with open(segment_filepath, "w") as f:
-                json.dump(segment, f, indent=4)  # Indent for readability
+            for segment_index, segment in enumerate(part):
+                segment_filename = f"{document_name}_{segment_index}.json"
+                segment_filepath = os.path.join(segment_dir, segment_filename)
+                with open(segment_filepath, "w") as f:
+                    json.dump(segment, f, indent=4)  # Indent for readability
 
-        print(f"Saved {len(part)} segments.")
+            print(f"Saved {len(part)} segments.")
+        except (ValueError or IOError) as e:
+            dbg("Failed to save segments. Logging details. Skipping to next file.",e ,1)
 
     def signal_handler(self, signal_number, frame):
         print("\nReceived signal, terminating threads...")
@@ -106,15 +140,16 @@ class BulkTextExtract:
         print(f"Finished conversion. Done: {self.progress_index}")
 
     def __init__(self, directory):
-
+        self.running_pool = False
         self.directory = validate_directory(directory)
         self.progress_file = self.directory+"/progress.json"
         self.max_num_threads = 10
-        self.thread_pool = multiprocessing.Pool(processes=self.max_num_threads)
+        self.thread_pool = None
 
         if directory == False:
             print("Couldn't find directory. Exiting")
             return
+
         self.progress_index = 0
         try:
             print("Looking for previous session in directory.")
@@ -139,13 +174,15 @@ class BulkTextExtract:
 
             self.begin_extract()
 
-
         except KeyboardInterrupt:  # Handle Ctrl+C
+            if self.thread_pool is not None:
+                self.thread_pool.terminate()
             print("\nExiting program...")
-            self.save_progress()  # Save progress when interrupted
-            self.thread_pool.terminate()
-            self.thread_pool.join()
+            self.save_progress()
+
+
 
 if __name__ == "__main__":
+    logging.basicConfig(filename=dbg_file, filemode='w', format='%(name)s - %(levelname)s - %(message)s')
     directory = input("Enter the directory to scan: ")
     app = BulkTextExtract(directory)
