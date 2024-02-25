@@ -13,6 +13,14 @@ import mpire
 from unstructured.partition.auto import partition
 from mpire import WorkerPool
 from unstructured.staging.base import convert_to_dict
+from unstructured.staging.base import elements_to_json, elements_from_json
+from unstructured.cleaners.core import clean_non_ascii_chars, clean_extra_whitespace, group_broken_paragraphs
+from unstructured.documents.elements import NarrativeText
+from unstructured.documents.elements import Title
+
+from unstructured.documents.elements import Image
+from unstructured.documents.elements import Formula
+from unstructured.documents.elements import FigureCaption
 
 DEBUG = False
 def validate_directory(directory):
@@ -30,9 +38,10 @@ dbg_file = "debug.log"
 def dbg(msg, obj, alarm: int = 0):
     conv = ""
     try:
-        conv=str(obj)
+        conv = str(obj)
     except TypeError:
-        conv="<Could not convert>"
+        conv = "<Could not convert>"
+        
     print(f"DEBUG: {msg} --- attached object {conv}")
 
     if alarm == 1:
@@ -141,50 +150,31 @@ class BulkTextExtract:
         print(f"\nExtracting text from {file}")
         if DEBUG == True:
             time.sleep(1)
-            part = ["test","test"]
+            elements = ["test","test"]
         else:
             try:
-                part = convert_to_dict(partition(filename=file, **BulkTextExtract.unstructured_settings))
+                elements = partition(filename=file, **BulkTextExtract.unstructured_settings)
+                for element in elements:
+                    if isinstance(element, (NarrativeText, Title)):
+                        element.apply(clean_non_ascii_chars, clean_extra_whitespace, group_broken_paragraphs)
+
             except OSError as e:
-                part = ["Error", f"Failed to partition {file}"]
+                elements = ["Error", f"Failed to partition {file}"]
                 print(f"There was a problem partitioning {file}. Logging information.")
                 dbg(f"OSError logging {file}", e)
         try:
 
-            directory = os.path.dirname(file)
-            # Create a cleaned-up document name for directory and file naming
+            dir = os.path.dirname(file)
             document_name = os.path.splitext(os.path.basename(file))[0].replace(".", "_")
-
-            # Create the directory for storing segments
-            segment_dir = os.path.join(directory, document_name)
-            os.makedirs(segment_dir, exist_ok=True)  # Create if it doesn't exist
-
-            def serialize_data(data):
-                if isinstance(data, dict):
-                    return {k: serialize_data(v) for k, v in data.items()}
-                elif isinstance(data, list):
-                    return [serialize_data(item) for item in data]
-                else:
-                    try:
-                        json.dumps(data)
-                        return data
-                    except (TypeError, OverflowError):
-
-                        try:
-                            s = str(data)
-                        except (TypeError, OSError):
-                            print(f"Skipping unserializable object: {data}")
-                            return None
-                        return s
-
-
+            segment_dir = os.path.join(dir, document_name)
+            os.makedirs(segment_dir, exist_ok=True)  
             segment_filename = f"{document_name}_raw.json"
             segment_filepath = os.path.join(segment_dir, segment_filename)
-            with open(segment_filepath, "w") as f:
-                json.dump(serialize_data(part), f, indent=4)  # Indent for readability
 
 
-            print(f"Saved {len(part)} segments.")
+            elements_to_json(elements, filename=segment_filepath, indent=4)
+            print(f"Saved {len(elements)} segments.")
+            
         except (ValueError or IOError) as e:
             dbg("Failed to save segments. Logging details. Skipping to next file.",e ,1)
 
