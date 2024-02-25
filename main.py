@@ -108,7 +108,6 @@ class BulkTextExtract:
     def begin_extract(self):
 
         print("Looking for files that need conversion...")
-
         for file in self.files:
             ext = splitext(file)[-1].upper()
             if ext in [".MOBI", ".PRC", ".AZW", ".AZW3", ".AZW4"]:
@@ -129,7 +128,7 @@ class BulkTextExtract:
 
 
     @staticmethod
-    def textExtractor(index, file):
+    def textExtractor(file):
 
         global DEBUG
         print(f"\nExtracting text from {file}")
