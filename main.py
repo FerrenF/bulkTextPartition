@@ -9,7 +9,8 @@ import mobi
 from unstructured.partition.auto import partition
 from mpire import WorkerPool
 from unstructured.staging.base import elements_to_json
-from unstructured.cleaners.core import clean_non_ascii_chars, clean_extra_whitespace, group_broken_paragraphs
+from unstructured.cleaners.core import clean_non_ascii_chars, clean_extra_whitespace, group_broken_paragraphs, \
+    replace_unicode_quotes
 from unstructured.documents.elements import NarrativeText
 from unstructured.documents.elements import Title
 
@@ -140,7 +141,7 @@ class BulkTextExtract:
                 elements = partition(filename=file, **BulkTextExtract.unstructured_settings)
                 for element in elements:
                     if isinstance(element, (NarrativeText, Title)):
-                        element.apply(clean_non_ascii_chars, clean_extra_whitespace, group_broken_paragraphs)
+                        element.apply(clean_non_ascii_chars, clean_extra_whitespace, group_broken_paragraphs, replace_unicode_quotes)
 
             except OSError as e:
                 elements = ["Error", f"Failed to partition {file}"]
