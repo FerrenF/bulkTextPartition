@@ -1,26 +1,17 @@
-import io
 import logging
-import multiprocessing
 import os
 import json
-import signal
 import time
 import shutil
 from os.path import splitext
 
 import mobi
-import mpire
 from unstructured.partition.auto import partition
 from mpire import WorkerPool
-from unstructured.staging.base import convert_to_dict
-from unstructured.staging.base import elements_to_json, elements_from_json
+from unstructured.staging.base import elements_to_json
 from unstructured.cleaners.core import clean_non_ascii_chars, clean_extra_whitespace, group_broken_paragraphs
 from unstructured.documents.elements import NarrativeText
 from unstructured.documents.elements import Title
-
-from unstructured.documents.elements import Image
-from unstructured.documents.elements import Formula
-from unstructured.documents.elements import FigureCaption
 
 DEBUG = False
 def validate_directory(directory):
@@ -92,12 +83,6 @@ class BulkTextExtract:
             self.files = None
             self.progress_index = 0
 
-
-    @staticmethod
-    def finish_thread(progress):
-        progress[0] += 1
-        BulkTextExtract.save_progress(progress[2], progress[1], progress[0])
-
     @staticmethod
     def convert_mobi(mobi_file_path):
         tempdir, filepath = (None, None)
@@ -135,10 +120,10 @@ class BulkTextExtract:
                     self.files[self.files.index(file)] = result
 
         print("Spawning pool and beginning... This will take quite some time.")
-        with WorkerPool(n_jobs=self.max_num_threads, shared_objects=(self.progress_index, self.files, self.progress_file)) as self.thread_pool:
+        with WorkerPool(n_jobs=self.max_num_threads) as self.thread_pool:
             self.running_pool = True
             to_do = self.files[self.progress_index:]
-            self.thread_pool.map_unordered(BulkTextExtract.textExtractor, to_do, progress_bar=True, worker_exit=BulkTextExtract.finish_thread)
+            self.thread_pool.map_unordered(BulkTextExtract.textExtractor, to_do, progress_bar=True)
 
         self.complete_progress()
 
@@ -190,7 +175,8 @@ class BulkTextExtract:
     def __init__(self, directory):
         self.running_pool = False
         self.directory = validate_directory(directory)
-        if directory == False:
+
+        if not self.directory:
             print("Couldn't find directory. Exiting")
             return
 
