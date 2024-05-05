@@ -1,11 +1,16 @@
+import abc
 import logging
 import os
 import json
+import threading
 import time
 import shutil
+from abc import abstractmethod
 from os.path import splitext
+from typing import List
 
 import mobi
+import unstructured
 from unstructured.partition.auto import partition
 from mpire import WorkerPool
 from unstructured.staging.base import elements_to_json
@@ -15,10 +20,10 @@ from unstructured.documents.elements import NarrativeText
 from unstructured.documents.elements import Title
 
 DEBUG = False
+
 def validate_directory(directory):
     if os.path.exists(directory):
         return directory
-
     tests = [os.path.dirname(__file__) + "/" + directory, os.path.dirname(__file__) + directory, "./"+directory]
     for test in tests:
         if os.path.exists(test):
@@ -38,6 +43,9 @@ def dbg(msg, obj, alarm: int = 0):
 
     if alarm == 1:
         logging.warning(msg, obj)
+
+
+
 
 class BulkTextExtract:
 

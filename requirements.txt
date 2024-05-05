@@ -1,3 +1,7 @@
-unstructured[all-docs]
-mpire
-mobi
+unstructured[all-docs]~=0.12.4
+mpire~=2.10.0
+mobi~=0.3.3
+loguru~=0.6.0
+pillow~=10.2.0
+click~=8.1.7
+pypandoc~=1.13
