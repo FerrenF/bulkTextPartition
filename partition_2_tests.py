@@ -3,10 +3,18 @@ import unittest
 import tempfile
 import shutil
 from partition_2 import EPUBTextResource, PDFTextResource, MOBITextResource, HTMLTextResource, ResourceFinder, \
-    DJVUTextResource
+    DJVUTextResource, AssignedPool
 
+
+
+def _log(x, src=None):
+    print(f"DEBUG: {x} ;; {('No Object' if not src else src)}")
 
 class TestTextResource(unittest.TestCase):
+
+    def tearDown(self):
+        # Clean up any resources used in the test cases
+        pass
 
     def test_html_text_resource(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -41,6 +49,35 @@ class TestTextResource(unittest.TestCase):
         pdf_content = pdf_resource.get_content()
         self.assertIsNotNone(pdf_content)
 
+    def test_epub_text_resource(self):
+        epub_file_path = "D:\\Project\\Py\\bulkTextPartition\\test\\No Shadow of a Doubt_ The 1919 Eclipse That Confirmed Einstein’s Theory of Relativity_Daniel Kennefick_liber3.epub"
+
+        # Test PDFTextResource
+        epub_resource = EPUBTextResource(epub_file_path)
+        epub_resource.load_resource()
+
+        _log("Tracking progress.", epub_resource)
+        prog = 0
+        while epub_resource.loading_status != 100:
+            st = epub_resource.loading_status
+            if prog != st:
+                _log(f"Progress made on resource - {st}", epub_resource)
+            if st < 0:
+                raise RuntimeError(f"Error encountered in worker thread for resource {epub_file_path}")
+            prog = st
+            continue
+
+        new_epub_paths = epub_resource.get_file_parts(True)
+        self.assertIsNotNone(new_epub_paths)
+
+        _log("Cleaning up split files for resource.", epub_resource)
+
+        for path in new_epub_paths:
+            if os.path.exists(path):
+                os.remove(path)
+
+        _log("Complete")
+
     def test_mobi_text_resource(self):
 
         mobi_file_path = "D:\\Project\\Py\\bulkTextPartition\\test\\Out of My Later Years_Albert Einstein_liber3.mobi"
@@ -48,10 +85,30 @@ class TestTextResource(unittest.TestCase):
         mobi_resource = MOBITextResource(mobi_file_path)
         mobi_resource.load_resource()
 
+        # at this point we no longer know if we have a mobi file, but we do know how many parts whatever text we did get comes in.
+
+        _log("Tracking progress.", mobi_resource)
+        prog = 0
         while mobi_resource.loading_status != 100:
+            st = mobi_resource.loading_status
+            if prog != st:
+                _log(f"Progress made on resource - {st}", mobi_resource)
+            if st < 0:
+                raise RuntimeError(f"Error encountered in worker thread for resource {mobi_resource.resource_name}")
+            prog = st
             continue
-        partitioned_content = mobi_resource.get_content()
-        self.assertIsNotNone(partitioned_content)
+
+        # get_file_parts should still return the locations of our split or converted files.
+        new_document_paths = mobi_resource.get_file_parts(True)
+        self.assertIsNotNone(new_document_paths)
+
+        _log("Cleaning up split files for resource.", new_document_paths)
+
+        for path in new_document_paths:
+            if os.path.exists(path):
+                os.remove(path)
+
+        _log("Complete")
 
     def test_resource_finder(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -87,6 +144,46 @@ class TestTextResource(unittest.TestCase):
         # Verify that the extracted text is not empty
         self.assertIsNotNone(extracted_text)
         print(f"Length of hidden text found in djvu: {len(extracted_text)}")  # Print the extracted text for manual inspection
+
+from mpire import WorkerPool
+from partition_2 import PoolManager
+
+# busy work
+def fibonacci(n):
+    if n <= 1:
+        return n
+    else:
+        return fibonacci(n-1) + fibonacci(n-2)
+
+
+class TestPoolManager(unittest.TestCase):
+    def setUp(self):
+        self.pool_manager = PoolManager()
+
+    def tearDown(self):
+        self.pool_manager.cleanup_assigned_pools()
+
+    def test_create_assigned_pool(self):
+        # Create three assigned pools with 10 workers each
+        for i in range(3):
+            resource = HTMLTextResource(f"Resource_{i}.html")
+            assigned_pool = self.pool_manager.create_assigned_pool(resource, num_workers=10)
+            self.assertIsInstance(assigned_pool, AssignedPool)
+            self.assertIsInstance(assigned_pool.get_worker_pool(), WorkerPool)
+
+    def test_find_assigned_pool_by_name(self):
+        # Create three assigned pools with 10 workers each
+        for i in range(3):
+            resource = HTMLTextResource(f"Resource_{i}.html")
+            self.pool_manager.create_assigned_pool(resource, num_workers=10)
+
+        # Test finding assigned pools by name
+        for i in range(3):
+            assigned_pool = self.pool_manager.find_assigned_pool_by_name(f"Resource_{i}.html")
+            self.assertIsNotNone(assigned_pool)
+            self.assertEqual(assigned_pool.get_resource().resource_name, f"Resource_{i}.html")
+
+
 
 
 if __name__ == '__main__':
