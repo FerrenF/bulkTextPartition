@@ -1,4 +1,3 @@
-Absolutely! Here's a basic GitHub README for your code:
 
 ## Bulk Text Extractor
 
